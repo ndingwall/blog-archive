@@ -163,13 +163,13 @@ def load_gold_standard() -> List[str]:
 
 def plot_subword_growth():
     examples = load_gold_standard()
-
     unique_subwords = set()
     n_unique_subwords = list()
     for word in examples:
         unique_subwords = unique_subwords.union(word)
         n_unique_subwords.append(len(unique_subwords))
-    ax = sns.lineplot(range(len(n_unique_subwords)), n_unique_subwords, palette='dark')  # , c='b')
+    fig, ax = plt.subplots(1, 1, figsize=(5, 4))
+    sns.lineplot(range(len(n_unique_subwords)), n_unique_subwords, palette='dark')  # , c='b')
     plt.xlabel("Number of words")
     plt.ylabel("Unique subwords")
     ax.xaxis.set_major_formatter(ticker.EngFormatter())
@@ -227,6 +227,34 @@ def plot_tokenizer_evaluation_scores():
     plt.text(ulm.useful_vocab_size + 750, ulm.score, "Unigram LM", size='large')
     ax.legend().set_visible(False)
     plt.show()
+
+
+def make_thumbnail():
+    res = pd.read_csv(os.path.join(DATA_LOCATION, "tokenizer_evaluations.csv"))
+
+    fig, ax = plt.subplots(1, 1, figsize=(4, 5), sharex=True)
+    sns.lineplot(x="useful_vocab_size", y="score", hue="model_type",
+                 ci=99, data=res, marker='o', ax=ax, err_style='band',
+                 markersize=8)
+    ax.xaxis.set_major_formatter(ticker.EngFormatter())
+    ax.yaxis.set_major_formatter(ticker.PercentFormatter(xmax=1, decimals=0))
+    ax.set_ylim([0, 0.7])
+    ax.set_xlabel("Relevant vocab size")
+    ax.set_ylabel("% morphologically sound subwords")
+
+    bert = res[res['model_type'] == 'Bert'].mean()
+    gpt = res[res['model_type'] == 'GPT2'].mean()
+    plt.text(bert.useful_vocab_size + 350, bert.score + 0.015, "Bert", size='large')
+    plt.text(gpt.useful_vocab_size + 650, gpt.score - 0.035, "GPT-2", size='large')
+
+    bpe = res[res['model_type'] == 'BPE'].max()
+    ulm = res[res['model_type'] == 'ULM'].max()
+    bpe = res[(res['model_type'] == 'BPE') & (res['vocab_size'] == 64000)].mean()
+    ulm = res[(res['model_type'] == 'ULM') & (res['vocab_size'] == 64000)].mean()
+    plt.text(bpe.useful_vocab_size - 1000, bpe.score - 0.01, "BPE", size='large', ha='right', rotation=24)
+    plt.text(ulm.useful_vocab_size - 5000, ulm.score - 0.07, "Unigram LM", size='large', ha='right', rotation=22)
+    ax.legend().set_visible(False)
+    plt.savefig("../images/tokenization-preview.png")
 
 
 def plot_learning_speed():
