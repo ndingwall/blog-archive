@@ -254,7 +254,7 @@ def make_thumbnail():
     plt.text(bpe.useful_vocab_size - 1000, bpe.score - 0.01, "BPE", size='large', ha='right', rotation=24)
     plt.text(ulm.useful_vocab_size - 5000, ulm.score - 0.07, "Unigram LM", size='large', ha='right', rotation=22)
     ax.legend().set_visible(False)
-    plt.savefig("../images/tokenization-preview.png")
+    plt.savefig("../images/tokenization-preview.png", bbox_inches='tight')
 
 
 def plot_learning_speed():
