@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Any
 
 from colors import color, ansilen
 import matplotlib.pyplot as plt
@@ -18,14 +18,28 @@ DATA_LOCATION = os.path.expanduser("~/data/tokenization/")
 
 class FormattedTable:
 
-    def __init__(self, tokenizers, max_word_len=14, max_separators=5):
+    def __init__(self, tokenizers: List[Tuple[str, Any]],
+                 max_word_len: int = 14,
+                 max_separators: int = 5,
+                 max_width: int = 72):
         self.tokenizers = tokenizers
         self.max_word_len = max_word_len
         self.max_separators = max_separators
+        self.max_width = max_width
+        self.words = []
+        self.gold_standard = []
+        self.tokenizations = {t: list() for name, t in tokenizers}
 
     @property
     def col_width(self):
         return self.max_word_len + self.max_separators
+
+    @property
+    def heading_width(self):
+        tokenizer_names = [name for name, _ in self.tokenizers] + ["Word"]
+        if self.gold_standard:
+            tokenizer_names.append("Gold standard")
+        return max([len(x) for x in tokenizer_names]) + 1
 
     @staticmethod
     def ansicenter(s, width):
@@ -33,6 +47,11 @@ class FormattedTable:
         left = int(extra_chars / 2)
         right = extra_chars - left
         return " " * left + s + " " * right
+
+    @staticmethod
+    def ljust(s, width):
+        extra_chars = width - ansilen(s)
+        return s + " " * extra_chars
 
     def _format_tokenization(self, tokens: List[str], gold_standard: List[str] = None) -> str:
         cell = ""
@@ -50,41 +69,64 @@ class FormattedTable:
             tokens = clean_tokens(tokens)
             return "-".join(tokens)
 
-    def _header(self, include_gold_standard=True):
-        tokenizer_names = [name.center(self.col_width) for name, _ in self.tokenizers]
-        header = f"{'Word'.center(self.max_word_len)}"
-        if include_gold_standard:
-            header += f"{'Gold standard'.center(self.col_width)}"
-        header += f"{' '.join(tokenizer_names)}"
-        return color(header, bg='light blue', style='bold')
-
-    def _row(self, word: str, gold_standard: List[str] = None):
-        cells = list()
+    def _run_on_word(self, word: str, gold_standard: List[str] = None):
+        self.words.append(word)
+        if gold_standard:
+            gs = clean_tokens(gold_standard)
+            self.gold_standard.append("-".join(gs))
         for name, tokenizer in self.tokenizers:
             formatted = self._format_tokenization(tokenize(tokenizer, word), gold_standard)
-            cells.append(self.ansicenter(formatted, self.col_width))
-        row = f"{color(word.center(self.max_word_len), bg='light blue', style='bold')}"
-        if gold_standard:
-            guide = self.ansicenter(f"{'-'.join(gold_standard)}", self.col_width)
-            row += f"{color(guide, bg='light green', style='bold')}"
-        row += f"{' '.join(cells)}"
-        return row
+            self.tokenizations[tokenizer].append(self.ansicenter(formatted, self.col_width))
+
+    def _fmt_top_heading(self, heading):
+        return heading.center(self.col_width)
+
+    def _fmt_side_heading(self, heading):
+        return heading.rjust(self.heading_width) + ' '
+
+    def _fmt_gold_standard(self, gs):
+        return self.ansicenter(gs, self.col_width)
+
+    def _display_words(self, word_indices: List[int]):
+        row = self._fmt_side_heading("") + " "
+        for word_idx in word_indices:
+            row += self._fmt_top_heading(self.words[word_idx])
+        print(color(row, bg='light blue', style='bold'))
+        if self.gold_standard:
+            row = self._fmt_side_heading("Gold standard") + " "
+            for word_idx in word_indices:
+                row += self._fmt_gold_standard(self.gold_standard[word_idx])
+            print(color(row, bg='light green', style='bold'))
+        for name, tokenizer in self.tokenizers:
+            row = color(self._fmt_side_heading(name) + " ", bg='light blue', style='bold')
+            for word_idx in word_indices:
+                row += self.tokenizations[tokenizer][word_idx]
+            print(row)
+
+    def _display(self):
+        n_words = len(self.words)
+        row_prefix_width = self.heading_width + self.col_width if self.gold_standard else self.heading_width
+        words_per_table = (self.max_width - row_prefix_width) // self.col_width
+        for start_pos in range(0, n_words, min(words_per_table, n_words)):
+            subset = range(start_pos, min(start_pos + words_per_table, n_words))
+            self._display_words(subset)
+            print("")
 
     def print_table_from_words(self, *examples: str):
-        print(self._header(include_gold_standard=False))
-        for example in examples:
-            print(self._row(example))
+        for word in examples:
+            self._run_on_word(word)
+        self._display()
 
     def print_table_from_gold_standard(self, *examples: List[str]):
-        print(self._header())
-        for example in examples:
-            print(self._row("".join(example), example))
+        for ex in examples:
+            self._run_on_word("".join(ex), ex)
+        self._display()
 
     def lookup_and_print(self, *examples: List[str]):
-        print(self._header())
         for example in examples:
             pron = get_pronunciation(example)
-            print(self._row("".join(pron), pron))
+            self._run_on_word("".join(pron), pron)
+        self._display()
 
 
 def get_definition(word):
